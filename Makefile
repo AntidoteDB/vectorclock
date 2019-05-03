@@ -12,7 +12,6 @@ distclean: clean
 	$(REBAR) clean --all
 
 cleantests:
-	rm -f test/*.beam
 	rm -rf logs/
 
 test:

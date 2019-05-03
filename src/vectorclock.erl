@@ -26,7 +26,10 @@
 -export([
          get_clock_of_dc/2,
          set_clock_of_dc/3,
+         set_clock_of_all_dcs/2,
          from_list/1,
+         to_list/1,
+         map/2,
          new/0,
          eq/2,
          all_dots_smaller/2,
@@ -37,6 +40,8 @@
          lt/2,
          max/1,
          min/1,
+         min_clock/1,
+         size/1,
          conc/2]).
 
 -type actor() :: any().
@@ -55,9 +60,26 @@ get_clock_of_dc(Key, VectorClock) ->
 set_clock_of_dc(Key, Value, VectorClock) ->
   VectorClock#{Key => Value}.
 
+-spec set_clock_of_all_dcs(non_neg_integer(), vectorclock()) -> vectorclock().
+set_clock_of_all_dcs(Value, VectorClock) ->
+  Fun = fun(_K,_V) -> Value end,
+  maps:map(Fun, VectorClock).
+
 -spec from_list([{any(), non_neg_integer()}]) -> vectorclock().
 from_list(List) ->
   maps:from_list(List).
+
+-spec to_list(vectorclock()) -> [{any(), non_neg_integer()}].
+to_list(VectorClock) ->
+  maps:to_list(VectorClock).
+
+-spec map(fun((actor(), non_neg_integer()) -> any()), vectorclock()) -> map().
+map(Fun, VectorClock) ->
+  maps:maps(Fun, VectorClock).
+
+-spec min_clock(vectorclock()) -> non_neg_integer().
+min_clock(VectorClock) ->
+  lists:min(maps:values(VectorClock)).
 
 -spec max([vectorclock()]) -> vectorclock().
 max([]) -> new();
@@ -81,6 +103,10 @@ max2(V1, V2) ->
 min([]) -> new();
 min([V]) -> V;
 min([V1, V2|T]) -> min([merge(fun erlang:min/2, V1, V2)|T]).
+
+-spec size(vectorclock()) -> non_neg_integer().
+size(V) ->
+  maps:size(V).
 
 -spec merge(fun((non_neg_integer(), non_neg_integer()) -> non_neg_integer()), vectorclock(), vectorclock()) -> vectorclock().
 merge(F, V1, V2) ->
@@ -158,17 +184,18 @@ conc(V1, V2) -> (not ge(V1, V2)) andalso (not le(V1, V2)).
 -ifdef(TEST).
 
 vectorclock_empty_test() ->
-    V1 = vectorclock:new(),
-    V2 = vectorclock:from_list([]),
+    V1 = new(),
+    V2 = from_list([]),
     ?assertEqual(V1, V2),
-    ?assertEqual(eq(vectorclock:min([]), vectorclock:max([])), true).
+    ?assertEqual(eq(min([]), max([])), true),
+    ?assertEqual(to_list(V1), []).
 
 vectorclock_test() ->
-    V1 = vectorclock:from_list([{1, 5}, {2, 4}, {3, 5}, {4, 6}]),
-    V2 = vectorclock:from_list([{1, 4}, {2, 3}, {3, 4}, {4, 5}]),
-    V3 = vectorclock:from_list([{1, 5}, {2, 4}, {3, 4}, {4, 5}]),
-    V4 = vectorclock:from_list([{1, 6}, {2, 3}, {3, 1}, {4, 7}]),
-    V5 = vectorclock:from_list([{1, 6}, {2, 7}]),
+    V1 = from_list([{1, 5}, {2, 4}, {3, 5}, {4, 6}]),
+    V2 = from_list([{1, 4}, {2, 3}, {3, 4}, {4, 5}]),
+    V3 = from_list([{1, 5}, {2, 4}, {3, 4}, {4, 5}]),
+    V4 = from_list([{1, 6}, {2, 3}, {3, 1}, {4, 7}]),
+    V5 = from_list([{1, 6}, {2, 7}]),
     ?assertEqual(all_dots_greater(V1, V2), true),
     ?assertEqual(all_dots_smaller(V2, V1), true),
     ?assertEqual(all_dots_greater(V1, V3), false),
@@ -185,15 +212,15 @@ vectorclock_lt_test() ->
   ?assertEqual(lt(from_list([{a, 2}]), from_list([{a, 1}])), false).
 
 vectorclock_max_test() ->
-  V1 = vectorclock:from_list([{1, 5}, {2, 4}]),
-  V2 = vectorclock:from_list([{1, 6}, {2, 3}]),
-  V3 = vectorclock:from_list([{1, 3}, {3, 2}]),
+  V1 = from_list([{1, 5}, {2, 4}]),
+  V2 = from_list([{1, 6}, {2, 3}]),
+  V3 = from_list([{1, 3}, {3, 2}]),
 
-  Expected12 = vectorclock:from_list([{1, 6}, {2, 4}]),
-  Expected23 = vectorclock:from_list([{1, 6}, {2, 3}, {3, 2}]),
-  Expected13 = vectorclock:from_list([{1, 5}, {2, 4}, {3, 2}]),
-  Expected123 = vectorclock:from_list([{1, 6}, {2, 4}, {3, 2}]),
-  Unexpected123 = vectorclock:from_list([{1, 5}, {2, 5}, {3, 5}]),
+  Expected12 = from_list([{1, 6}, {2, 4}]),
+  Expected23 = from_list([{1, 6}, {2, 3}, {3, 2}]),
+  Expected13 = from_list([{1, 5}, {2, 4}, {3, 2}]),
+  Expected123 = from_list([{1, 6}, {2, 4}, {3, 2}]),
+  Unexpected123 = from_list([{1, 5}, {2, 5}, {3, 5}]),
 
   ?assertEqual(eq(max([V1, V2]), Expected12), true),
   ?assertEqual(eq(max([V2, V3]), Expected23), true),
@@ -202,15 +229,15 @@ vectorclock_max_test() ->
   ?assertEqual(eq(max([V1, V2, V3]), Unexpected123), false).
 
 vectorclock_min_test() ->
-  V1 = vectorclock:from_list([{1, 5}, {2, 4}]),
-  V2 = vectorclock:from_list([{1, 6}, {2, 3}]),
-  V3 = vectorclock:from_list([{1, 3}, {3, 2}]),
+  V1 = from_list([{1, 5}, {2, 4}]),
+  V2 = from_list([{1, 6}, {2, 3}]),
+  V3 = from_list([{1, 3}, {3, 2}]),
 
-  Expected12 = vectorclock:from_list([{1, 5}, {2, 3}]),
-  Expected23 = vectorclock:from_list([{1, 3}]),
-  Expected13 = vectorclock:from_list([{1, 3}]),
-  Expected123 = vectorclock:from_list([{1, 3}]),
-  Unexpected123 = vectorclock:from_list([{1, 3}, {2, 3}, {3, 2}]),
+  Expected12 = from_list([{1, 5}, {2, 3}]),
+  Expected23 = from_list([{1, 3}]),
+  Expected13 = from_list([{1, 3}]),
+  Expected123 = from_list([{1, 3}]),
+  Unexpected123 = from_list([{1, 3}, {2, 3}, {3, 2}]),
 
   ?assertEqual(eq(min([V1, V2]), Expected12), true),
   ?assertEqual(eq(min([V2, V3]), Expected23), true),
@@ -220,11 +247,11 @@ vectorclock_min_test() ->
   ?assertEqual(eq(vectorclock:min([V1]), vectorclock:max([V1])), true).
 
 vectorclock_conc_test() ->
-  V1 = vectorclock:from_list([{1, 5}, {2, 4}]),
-  V2 = vectorclock:from_list([{1, 6}, {2, 3}]),
-  V3 = vectorclock:from_list([{1, 3}, {3, 2}]),
-  V4 = vectorclock:from_list([{1, 6}, {3, 3}]),
-  V5 = vectorclock:from_list([{1, 6}]),
+  V1 = from_list([{1, 5}, {2, 4}]),
+  V2 = from_list([{1, 6}, {2, 3}]),
+  V3 = from_list([{1, 3}, {3, 2}]),
+  V4 = from_list([{1, 6}, {3, 3}]),
+  V5 = from_list([{1, 6}]),
 
   ?assertEqual(conc(V1, V2), true),
   ?assertEqual(conc(V2, V3), true),
@@ -232,11 +259,11 @@ vectorclock_conc_test() ->
   ?assertEqual(conc(V5, V4), false).
 
 vectorclock_set_test() ->
-  V1 = vectorclock:from_list([{1, 1}, {2, 2}]),
-  V2 = vectorclock:from_list([{1, 1}, {2, 2}, {3, 3}]),
-  V3 = vectorclock:from_list([{1, 1}, {2, 4}]),
+  V1 = from_list([{1, 1}, {2, 2}]),
+  V2 = from_list([{1, 1}, {2, 2}, {3, 3}]),
+  V3 = from_list([{1, 1}, {2, 4}]),
 
-  ?assertEqual(eq(V2, vectorclock:set_clock_of_dc(3, 3, V1)), true),
-  ?assertEqual(eq(V3, vectorclock:set_clock_of_dc(2, 4, V1)), true).
+  ?assertEqual(eq(V2, set_clock_of_dc(3, 3, V1)), true),
+  ?assertEqual(eq(V3, set_clock_of_dc(2, 4, V1)), true).
 
 -endif.
