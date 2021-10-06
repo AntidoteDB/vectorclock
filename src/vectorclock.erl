@@ -88,6 +88,7 @@ max([V1, V2 | T]) -> max([max2(V1, V2) | T]).
 
 %% component-wise maximum of two clocks
 -spec max2(vectorclock(), vectorclock()) -> vectorclock().
+max2(#{},#{}) -> new();
 max2(V1, V2) ->
   FoldFun =
     fun(DC, A, Acc) ->
